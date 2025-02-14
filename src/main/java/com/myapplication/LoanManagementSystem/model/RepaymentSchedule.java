@@ -1,6 +1,7 @@
 package com.myapplication.LoanManagementSystem.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.myapplication.LoanManagementSystem.utils.FrequencyConverter;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -36,6 +37,9 @@ public class RepaymentSchedule {
     // Equated Monthly Installment or EMI amount.
     private BigDecimal emi;
 
+    // Equated Weekly Installment or EMI amount.
+    private BigDecimal ewi;
+
     @Column(name = "amount_paid")
     private BigDecimal amountPaid;
 
@@ -45,6 +49,7 @@ public class RepaymentSchedule {
 
     // e.g., "Paid", "Pending", etc.
     @Enumerated(EnumType.STRING)
+    //@Convert(converter = FrequencyConverter.class)
     @Column(name = "payment_status")
     private RepaymentStatus paymentStatus;
 

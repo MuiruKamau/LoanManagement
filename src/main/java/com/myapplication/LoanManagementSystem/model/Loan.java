@@ -3,6 +3,7 @@ package com.myapplication.LoanManagementSystem.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.myapplication.LoanManagementSystem.utils.FrequencyConverter;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -43,6 +44,7 @@ public class Loan {
 
     // e.g., "weeks", "months", "years"
     @Enumerated(EnumType.STRING)
+    //@Convert(converter = FrequencyConverter.class)
     @Column(name = "repayment_frequency")
     private Frequency repaymentFrequency;
 

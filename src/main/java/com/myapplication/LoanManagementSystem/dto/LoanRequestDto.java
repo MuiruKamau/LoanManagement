@@ -1,20 +1,17 @@
 package com.myapplication.LoanManagementSystem.dto;
 
 import com.myapplication.LoanManagementSystem.model.Frequency;
-import com.myapplication.LoanManagementSystem.model.LoanStatus;
 import lombok.Data;
-
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 @Data
 public class LoanRequestDto {
     private Long customerId;
     private BigDecimal principalAmount;
-    private BigDecimal interestRate;
-    private LocalDate dueDate;
+    // Interest rate input as a whole number (e.g., 10 for 10%)
+    private int interestRate;
+    // Repayment period is in months
     private int repaymentPeriod;
     private Frequency repaymentFrequency;
-    private BigDecimal totalRepayableAmount;
-    private LoanStatus status;
 }
+

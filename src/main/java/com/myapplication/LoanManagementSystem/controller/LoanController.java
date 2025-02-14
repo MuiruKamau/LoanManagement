@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @CrossOrigin(origins = "*", allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
@@ -50,14 +51,12 @@ public class LoanController {
         // Map the DTO fields to the Loan entity
         loan.setCustomer(customer);
         loan.setPrincipalAmount(dto.getPrincipalAmount());
-        loan.setInterestRate(dto.getInterestRate());
-        loan.setDueDate(dto.getDueDate());
+        loan.setInterestRate(BigDecimal.valueOf(dto.getInterestRate()));
         loan.setRepaymentPeriod(dto.getRepaymentPeriod());
         loan.setRepaymentFrequency(dto.getRepaymentFrequency());
-        loan.setTotalRepayableAmount(dto.getTotalRepayableAmount());
-        loan.setStatus(dto.getStatus());
 
-        Loan createdLoan = loanService.createLoan(loan);
+
+        Loan createdLoan = loanService.createLoan(dto);
         return ResponseEntity.ok(createdLoan);
     }
 
@@ -69,12 +68,11 @@ public class LoanController {
         // If updating the customer is allowed, fetch the customer similarly as above.
         // For this example, we assume the customer remains the same.
         loanToUpdate.setPrincipalAmount(dto.getPrincipalAmount());
-        loanToUpdate.setInterestRate(dto.getInterestRate());
-        loanToUpdate.setDueDate(dto.getDueDate());
+        loanToUpdate.setInterestRate(BigDecimal.valueOf(dto.getInterestRate()));
         loanToUpdate.setRepaymentPeriod(dto.getRepaymentPeriod());
         loanToUpdate.setRepaymentFrequency(dto.getRepaymentFrequency());
-        loanToUpdate.setTotalRepayableAmount(dto.getTotalRepayableAmount());
-        loanToUpdate.setStatus(dto.getStatus());
+
+
         Loan updatedLoan = loanService.updateLoan(id, loanToUpdate);
         return ResponseEntity.ok(updatedLoan);
     }
@@ -92,7 +90,8 @@ public class LoanController {
         LoanCalculationResponseDto response = LoanCalculator.calculateLoan(
                 requestDto.getPrincipalAmount(),
                 requestDto.getRepaymentPeriod(),
-                requestDto.getInterestRate()  // Now inputted by the user
+                requestDto.getInterestRate(),
+                requestDto.getFrequency()// Now inputted by the user
         );
         return ResponseEntity.ok(response);
     }
