@@ -37,17 +37,10 @@ public class LoanService {
 
     /**
      * Creates a new loan using flat interest calculations.
-     * The amortization schedule for each installment now includes:
+     * The amortization schedule for each installment includes:
      * - Due Date
-     * - EMI (which is equal to Amount Due)
-     * - Principal (per installment)
-     * - Interest (per installment)
-     * - TotalAmountPayable (the overall loan total, repeated in every schedule row)
-     *
-     * A summary record is appended at the end of the schedule list with:
-     * - TotalAmountPayable
-     * - TotalAmountPaid (initially zero)
-     * - TotalRemainingBalance (initially equal to TotalAmountPayable)
+     * - EMI (which equals Amount Due)
+     * - AmountPaid, PaymentDate, PaymentStatus, CreatedAt, and the id.
      */
     public Loan createLoan(LoanRequestDto dto) {
         // 1. Fetch the customer details
@@ -58,25 +51,36 @@ public class LoanService {
         Loan loan = new Loan();
         loan.setCustomer(customer);
         loan.setPrincipalAmount(dto.getPrincipalAmount());
-        // Store interest rate as BigDecimal (e.g., 10 means 10%)
         loan.setInterestRate(new BigDecimal(dto.getInterestRate()));
+        // dto.getRepaymentPeriod() is assumed to be in months
         loan.setRepaymentPeriod(dto.getRepaymentPeriod());
         loan.setRepaymentFrequency(dto.getRepaymentFrequency());
         loan.setStatus(LoanStatus.ACTIVE);
         loan.setCreatedAt(java.time.LocalDateTime.now());
 
-        // 3. Calculate total repayable amount using flat interest:
-        //    totalInterest = principal * (interestRate/100)
+        // 3. Determine number of installments based on frequency
+        int installments;
+        if (loan.getRepaymentFrequency() == Frequency.MONTHLY) {
+            installments = dto.getRepaymentPeriod();
+        } else if (loan.getRepaymentFrequency() == Frequency.WEEKLY) {
+            // Using an average of 4.33 weeks per month
+            installments = (int) Math.ceil(dto.getRepaymentPeriod() * 4.33);
+        } else {
+            // Default fallback (if needed)
+            installments = dto.getRepaymentPeriod();
+        }
+        loan.setNumberOfInstallments(installments);
+
+        // 4. Calculate total repayable amount using flat interest:
+        //    totalInterest = principal * (interestRate / 100)
         //    totalRepayable = principal + totalInterest
-        int installments = dto.getRepaymentPeriod();
         BigDecimal totalInterest = dto.getPrincipalAmount()
                 .multiply(new BigDecimal(dto.getInterestRate()))
                 .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
         BigDecimal totalRepayable = dto.getPrincipalAmount().add(totalInterest);
         loan.setTotalRepayableAmount(totalRepayable);
-        loan.setNumberOfInstallments(installments);
 
-        // 4. Set the overall loan due date based on frequency
+        // 5. Set the overall loan due date based on frequency
         LocalDate baseDate = LocalDate.now();
         if (loan.getRepaymentFrequency() == Frequency.MONTHLY) {
             loan.setDueDate(baseDate.plusMonths(installments));
@@ -84,7 +88,7 @@ public class LoanService {
             loan.setDueDate(baseDate.plusWeeks(installments));
         }
 
-        // 5. Generate the amortization schedule with flat interest details
+        // 6. Generate the amortization schedule with minimal fields only
         List<RepaymentSchedule> scheduleList = generateAmortizationSchedule(loan, installments, totalRepayable);
         loan.setRepaymentSchedules(scheduleList);
 
@@ -95,27 +99,17 @@ public class LoanService {
      * Generates a flat interest amortization schedule.
      * Each installment record will have:
      *   - dueDate (incremented by 1 month or week based on frequency)
-     *   - emi (which equals amountDue)
-     *   - principal (principal per installment)
-     *   - interest (interest per installment)
-     *   - totalAmountPayable (the same overall amount for all installments)
-     *
-     * A summary record is added at the end with:
-     *   - TotalAmountPayable
-     *   - TotalAmountPaid (initially zero)
-     *   - TotalRemainingBalance (initially equal to TotalAmountPayable)
+     *   - emi (which equals amountDue, computed as totalRepayable / installments)
+     *   - amountPaid (initially zero)
+     *   - paymentStatus (initially PENDING)
+     *   - createdAt
      */
     private List<RepaymentSchedule> generateAmortizationSchedule(Loan loan, int installments, BigDecimal totalRepayable) {
         List<RepaymentSchedule> schedules = new ArrayList<>();
         LocalDate baseDate = LocalDate.now();
 
-        // Compute per-installment amounts
-        BigDecimal principalPerInstallment = loan.getPrincipalAmount()
-                .divide(new BigDecimal(installments), 2, RoundingMode.HALF_UP);
-        BigDecimal totalInterest = totalRepayable.subtract(loan.getPrincipalAmount());
-        BigDecimal interestPerInstallment = totalInterest
-                .divide(new BigDecimal(installments), 2, RoundingMode.HALF_UP);
-        BigDecimal emi = principalPerInstallment.add(interestPerInstallment);
+        // Compute EMI as totalRepayable divided by the number of installments
+        BigDecimal emi = totalRepayable.divide(new BigDecimal(installments), 2, RoundingMode.HALF_UP);
 
         if (loan.getRepaymentFrequency() == Frequency.MONTHLY) {
             for (int i = 1; i <= installments; i++) {
@@ -124,9 +118,6 @@ public class LoanService {
                 schedule.setDueDate(baseDate.plusMonths(i));
                 schedule.setEmi(emi);
                 schedule.setAmountDue(emi);
-                schedule.setPrincipal(principalPerInstallment);
-                schedule.setInterest(interestPerInstallment);
-                schedule.setTotalAmountPayable(totalRepayable);
                 schedule.setPaymentStatus(RepaymentStatus.PENDING);
                 schedule.setCreatedAt(java.time.LocalDateTime.now());
                 schedules.add(schedule);
@@ -138,25 +129,11 @@ public class LoanService {
                 schedule.setDueDate(baseDate.plusWeeks(i));
                 schedule.setEmi(emi);
                 schedule.setAmountDue(emi);
-                schedule.setPrincipal(principalPerInstallment);
-                schedule.setInterest(interestPerInstallment);
-                schedule.setTotalAmountPayable(totalRepayable);
                 schedule.setPaymentStatus(RepaymentStatus.PENDING);
                 schedule.setCreatedAt(java.time.LocalDateTime.now());
                 schedules.add(schedule);
             }
         }
-
-        // Append a summary record at the end of the schedule list.
-        // This record holds the overall totals and will be updated as payments are made.
-        RepaymentSchedule summary = new RepaymentSchedule();
-        summary.setLoan(loan);
-        summary.setTotalAmountPayable(totalRepayable);
-        summary.setTotalAmountPaid(BigDecimal.ZERO);
-        summary.setTotalRemainingBalance(totalRepayable);
-        summary.setCreatedAt(java.time.LocalDateTime.now());
-        schedules.add(summary);
-
         return schedules;
     }
 
@@ -170,7 +147,6 @@ public class LoanService {
             loan.setStatus(loanDetails.getStatus());
             loan.setCreatedAt(loanDetails.getCreatedAt());
             loan.setCustomer(loanDetails.getCustomer());
-            // Regeneration of schedules can be added here if needed
             return loanRepository.save(loan);
         }).orElseThrow(() -> new RuntimeException("Loan not found with id " + id));
     }
