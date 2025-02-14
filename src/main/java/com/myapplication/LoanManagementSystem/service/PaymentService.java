@@ -19,6 +19,7 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 public class PaymentService {
@@ -77,11 +78,17 @@ public class PaymentService {
         Loan loan = loanRepository.findById(dto.getLoanId())
                 .orElseThrow(() -> new RuntimeException("Loan not found with id " + dto.getLoanId()));
 
+        /*List<RepaymentSchedule> schedules = loan.getRepaymentSchedules().stream()
+                .filter(schedule -> schedule.getDueDate() != null)
+                .sorted(Comparator.comparing(RepaymentSchedule::getDueDate))
+                .collect(Collectors.toList());*/
+
         // Sort installments by due date or scheduleId
         List<RepaymentSchedule> schedules = loan.getRepaymentSchedules().stream()
+                .filter(rs -> rs.getDueDate() != null)
                 .filter(rs -> rs.getPaymentStatus() != RepaymentStatus.PAID)
                 .sorted(Comparator.comparing(RepaymentSchedule::getDueDate))
-                .toList();
+                .collect(Collectors.toList());
 
         BigDecimal remainingPayment = dto.getPaymentAmount();
 

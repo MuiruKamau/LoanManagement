@@ -1,9 +1,7 @@
 package com.myapplication.LoanManagementSystem.model;
 
-
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
-import com.myapplication.LoanManagementSystem.utils.FrequencyConverter;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -26,7 +24,7 @@ public class Loan {
     // Many loans belong to one customer.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id", nullable = false)
-    @JsonManagedReference // Add JsonManagedReference here
+    @JsonManagedReference
     private Customer customer;
 
     @Column(name = "principal_amount")
@@ -42,27 +40,27 @@ public class Loan {
     @Column(name = "repayment_period")
     private Integer repaymentPeriod;
 
-    // e.g., "weeks", "months", "years"
+    // e.g., "WEEKLY", "MONTHLY"
     @Enumerated(EnumType.STRING)
-    //@Convert(converter = FrequencyConverter.class)
-    @Column(name = "repayment_frequency")
     private Frequency repaymentFrequency;
 
-
-    // Computed value (can be computed in the service or stored if required)
+    // Computed value (e.g., principal + interest)
     @Column(name = "total_repayable_amount")
     private BigDecimal totalRepayableAmount;
 
-    // e.g., "Active", "Paid", "Defaulted"
+    // e.g., "ACTIVE", "PAID", "DEFAULTED"
     @Enumerated(EnumType.STRING)
     private LoanStatus status;
 
     @Column(name = "created_at")
-    //private LocalDateTime createdAt;
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    // New field to store the number of installments generated (e.g., from your LoanCalculator)
+    @Column(name = "number_of_installments")
+    private int numberOfInstallments;
 
-    //  One loan can have many repayment schedules.
+    // One loan can have many repayment schedules.
     @OneToMany(mappedBy = "loan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<RepaymentSchedule> repaymentSchedules;
 }
+
