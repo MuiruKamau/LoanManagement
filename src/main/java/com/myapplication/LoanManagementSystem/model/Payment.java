@@ -1,5 +1,6 @@
 package com.myapplication.LoanManagementSystem.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
@@ -29,10 +30,12 @@ public class Payment {
     // Reference to the loan being paid (if you want to store it)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "loan_id", nullable = false)
+    @JsonIgnore
     private Loan loan;
 
     // Reference to the specific installment
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "repayment_schedule_id", nullable = false)
+    @JsonIgnore
     private RepaymentSchedule repaymentSchedule;
 }

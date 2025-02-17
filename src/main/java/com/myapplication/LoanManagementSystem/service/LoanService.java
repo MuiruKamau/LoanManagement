@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -36,11 +37,7 @@ public class LoanService {
     }
 
     /**
-     * Creates a new loan using flat interest calculations.
-     * The amortization schedule for each installment includes:
-     * - Due Date
-     * - EMI (which equals Amount Due)
-     * - AmountPaid, PaymentDate, PaymentStatus, CreatedAt, and the id.
+     * Creates a new loan using flat interest calculations and generates an amortization schedule.
      */
     public Loan createLoan(LoanRequestDto dto) {
         // 1. Fetch the customer details
@@ -52,11 +49,10 @@ public class LoanService {
         loan.setCustomer(customer);
         loan.setPrincipalAmount(dto.getPrincipalAmount());
         loan.setInterestRate(new BigDecimal(dto.getInterestRate()));
-        // dto.getRepaymentPeriod() is assumed to be in months
         loan.setRepaymentPeriod(dto.getRepaymentPeriod());
         loan.setRepaymentFrequency(dto.getRepaymentFrequency());
         loan.setStatus(LoanStatus.ACTIVE);
-        loan.setCreatedAt(java.time.LocalDateTime.now());
+        loan.setCreatedAt(LocalDateTime.now());
 
         // 3. Determine number of installments based on frequency
         int installments;
@@ -66,14 +62,13 @@ public class LoanService {
             // Using an average of 4.33 weeks per month
             installments = (int) Math.ceil(dto.getRepaymentPeriod() * 4.33);
         } else {
-            // Default fallback (if needed)
             installments = dto.getRepaymentPeriod();
         }
         loan.setNumberOfInstallments(installments);
 
         // 4. Calculate total repayable amount using flat interest:
-        //    totalInterest = principal * (interestRate / 100)
-        //    totalRepayable = principal + totalInterest
+        // totalInterest = principal * (interestRate / 100)
+        // totalRepayable = principal + totalInterest
         BigDecimal totalInterest = dto.getPrincipalAmount()
                 .multiply(new BigDecimal(dto.getInterestRate()))
                 .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
@@ -88,7 +83,7 @@ public class LoanService {
             loan.setDueDate(baseDate.plusWeeks(installments));
         }
 
-        // 6. Generate the amortization schedule with minimal fields only
+        // 6. Generate the amortization schedule
         List<RepaymentSchedule> scheduleList = generateAmortizationSchedule(loan, installments, totalRepayable);
         loan.setRepaymentSchedules(scheduleList);
 
@@ -97,29 +92,30 @@ public class LoanService {
 
     /**
      * Generates a flat interest amortization schedule.
-     * Each installment record will have:
-     *   - dueDate (incremented by 1 month or week based on frequency)
-     *   - emi (which equals amountDue, computed as totalRepayable / installments)
-     *   - amountPaid (initially zero)
-     *   - paymentStatus (initially PENDING)
-     *   - createdAt
+     * For MONTHLY frequency, sets the installment in the "emi" field.
+     * For WEEKLY frequency, sets the installment in the "ewi" field.
      */
     private List<RepaymentSchedule> generateAmortizationSchedule(Loan loan, int installments, BigDecimal totalRepayable) {
         List<RepaymentSchedule> schedules = new ArrayList<>();
         LocalDate baseDate = LocalDate.now();
 
-        // Compute EMI as totalRepayable divided by the number of installments
-        BigDecimal emi = totalRepayable.divide(new BigDecimal(installments), 2, RoundingMode.HALF_UP);
+        // Compute installment amount as totalRepayable divided by the number of installments
+        BigDecimal installmentAmount = totalRepayable.divide(new BigDecimal(installments), 2, RoundingMode.HALF_UP);
 
         if (loan.getRepaymentFrequency() == Frequency.MONTHLY) {
             for (int i = 1; i <= installments; i++) {
                 RepaymentSchedule schedule = new RepaymentSchedule();
                 schedule.setLoan(loan);
                 schedule.setDueDate(baseDate.plusMonths(i));
-                schedule.setEmi(emi);
-                schedule.setAmountDue(emi);
+                schedule.setEmi(installmentAmount); // For monthly, store in emi
+                // Optionally, you may set ewi to null explicitly
+                schedule.setEwi(null);
+                schedule.setAmountDue(installmentAmount);
+                schedule.setAmountPaid(BigDecimal.ZERO);
                 schedule.setPaymentStatus(RepaymentStatus.PENDING);
-                schedule.setCreatedAt(java.time.LocalDateTime.now());
+                schedule.setCreatedAt(LocalDateTime.now());
+                // Set the overall loan total on each schedule row
+
                 schedules.add(schedule);
             }
         } else if (loan.getRepaymentFrequency() == Frequency.WEEKLY) {
@@ -127,36 +123,77 @@ public class LoanService {
                 RepaymentSchedule schedule = new RepaymentSchedule();
                 schedule.setLoan(loan);
                 schedule.setDueDate(baseDate.plusWeeks(i));
-                schedule.setEmi(emi);
-                schedule.setAmountDue(emi);
+                schedule.setEwi(installmentAmount); // For weekly, store in ewi
+                // Optionally, set emi to null explicitly
+                schedule.setEmi(null);
+                schedule.setAmountDue(installmentAmount);
+                schedule.setAmountPaid(BigDecimal.ZERO);
                 schedule.setPaymentStatus(RepaymentStatus.PENDING);
-                schedule.setCreatedAt(java.time.LocalDateTime.now());
+                schedule.setCreatedAt(LocalDateTime.now());
+
                 schedules.add(schedule);
             }
         }
         return schedules;
     }
 
-    public Loan updateLoan(Long id, Loan loanDetails) {
-        return loanRepository.findById(id).map(loan -> {
-            loan.setPrincipalAmount(loanDetails.getPrincipalAmount());
-            loan.setInterestRate(loanDetails.getInterestRate());
-            loan.setRepaymentPeriod(loanDetails.getRepaymentPeriod());
-            loan.setRepaymentFrequency(loanDetails.getRepaymentFrequency());
-            loan.setTotalRepayableAmount(loanDetails.getTotalRepayableAmount());
-            loan.setStatus(loanDetails.getStatus());
-            loan.setCreatedAt(loanDetails.getCreatedAt());
-            loan.setCustomer(loanDetails.getCustomer());
-            return loanRepository.save(loan);
-        }).orElseThrow(() -> new RuntimeException("Loan not found with id " + id));
+    /**
+     * Updates an existing loan, recalculating computed fields and regenerating the repayment schedules.
+     */
+    public Loan updateLoan(Long id, LoanRequestDto dto) {
+        Loan existingLoan = loanRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Loan not found with id " + id));
+
+        // Update allowed fields (customer remains unchanged)
+        existingLoan.setPrincipalAmount(dto.getPrincipalAmount());
+        existingLoan.setInterestRate(new BigDecimal(dto.getInterestRate()));
+        existingLoan.setRepaymentPeriod(dto.getRepaymentPeriod());
+        existingLoan.setRepaymentFrequency(dto.getRepaymentFrequency());
+
+        // Recalculate computed fields
+        int installments;
+        if (existingLoan.getRepaymentFrequency() == Frequency.MONTHLY) {
+            installments = dto.getRepaymentPeriod();
+        } else if (existingLoan.getRepaymentFrequency() == Frequency.WEEKLY) {
+            installments = (int) Math.ceil(dto.getRepaymentPeriod() * 4.33);
+        } else {
+            installments = dto.getRepaymentPeriod();
+        }
+        existingLoan.setNumberOfInstallments(installments);
+
+        BigDecimal totalInterest = dto.getPrincipalAmount()
+                .multiply(new BigDecimal(dto.getInterestRate()))
+                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+        BigDecimal totalRepayable = dto.getPrincipalAmount().add(totalInterest);
+        existingLoan.setTotalRepayableAmount(totalRepayable);
+
+        LocalDate baseDate = LocalDate.now();
+        if (existingLoan.getRepaymentFrequency() == Frequency.MONTHLY) {
+            existingLoan.setDueDate(baseDate.plusMonths(installments));
+        } else if (existingLoan.getRepaymentFrequency() == Frequency.WEEKLY) {
+            existingLoan.setDueDate(baseDate.plusWeeks(installments));
+        }
+
+        // Regenerate repayment schedules based on new parameters
+        List<RepaymentSchedule> newSchedules = generateAmortizationSchedule(existingLoan, installments, totalRepayable);
+
+        // Update the existing collection in place to avoid orphan removal issues
+        if (existingLoan.getRepaymentSchedules() != null) {
+            existingLoan.getRepaymentSchedules().clear();
+            existingLoan.getRepaymentSchedules().addAll(newSchedules);
+        } else {
+            existingLoan.setRepaymentSchedules(newSchedules);
+        }
+
+        return loanRepository.save(existingLoan);
     }
+
+
 
     public void deleteLoan(Long id) {
         loanRepository.deleteById(id);
     }
 }
-
-
 
 
 /*package com.myapplication.LoanManagementSystem.service;

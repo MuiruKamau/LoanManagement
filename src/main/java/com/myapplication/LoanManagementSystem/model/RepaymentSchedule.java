@@ -1,6 +1,7 @@
 package com.myapplication.LoanManagementSystem.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import jakarta.persistence.*;
 import lombok.*;
@@ -8,6 +9,7 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -57,4 +59,10 @@ public class RepaymentSchedule {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    // NEW: One-to-many relationship to payments with cascade delete and orphan removal.
+    @OneToMany(mappedBy = "repaymentSchedule", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnoreProperties("loan")
+    private List<Payment> payments;
 }
+

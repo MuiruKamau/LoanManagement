@@ -63,6 +63,13 @@ public class LoanController {
     // PUT endpoint for updating an existing loan using LoanRequestDto: /loans/update/{id}
     @PutMapping("/update/{id}")
     public ResponseEntity<Loan> updateLoan(@PathVariable Long id, @RequestBody LoanRequestDto dto) {
+        // Pass the DTO directly to the service update method.
+        Loan updatedLoan = loanService.updateLoan(id, dto);
+        return ResponseEntity.ok(updatedLoan);
+    }
+
+
+    /*public ResponseEntity<Loan> updateLoan(@PathVariable Long id, @RequestBody LoanRequestDto dto) {
         // First, retrieve the existing loan (which contains the full customer details)
         Loan existingLoan = loanService.getLoanById(id)
                 .orElseThrow(() -> new RuntimeException("Loan not found with id " + id));
@@ -85,7 +92,7 @@ public class LoanController {
         // Do not update the customer field.
         Loan updatedLoan = loanService.updateLoan(id, existingLoan);
         return ResponseEntity.ok(updatedLoan);
-    }
+    }*/
 
 
     /*public ResponseEntity<Loan> updateLoan(@PathVariable Long id, @RequestBody LoanRequestDto dto) {
