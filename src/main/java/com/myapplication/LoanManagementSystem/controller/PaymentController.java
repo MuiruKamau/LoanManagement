@@ -1,9 +1,6 @@
 package com.myapplication.LoanManagementSystem.controller;
 
-import com.myapplication.LoanManagementSystem.dto.payments.BulkPaymentRequestDto;
-import com.myapplication.LoanManagementSystem.dto.payments.PaymentRequestDto;
-import com.myapplication.LoanManagementSystem.dto.payments.PaymentDto;
-import com.myapplication.LoanManagementSystem.dto.payments.RepaymentScheduleDto;
+import com.myapplication.LoanManagementSystem.dto.payments.*;
 import com.myapplication.LoanManagementSystem.service.PaymentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -68,6 +65,13 @@ public class PaymentController {
         List<PaymentDto> payments = paymentService.getPaymentsByLoan(loanId);
         return ResponseEntity.ok(payments);
     }
+
+    @GetMapping("/loan/{loanId}/summary")
+    public ResponseEntity<PaymentSummaryDto> getPaymentSummary(@PathVariable Long loanId) {
+        PaymentSummaryDto summary = paymentService.calculatePaymentSummary(loanId);
+        return ResponseEntity.ok(summary);
+    }
+
 }
 
 

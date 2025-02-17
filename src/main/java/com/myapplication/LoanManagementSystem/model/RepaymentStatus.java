@@ -6,6 +6,6 @@ public enum RepaymentStatus {
     PAID,
     PENDING,
     PARTIALLYPAID,
-    LATE;
+    LATE, PARTIALLY_PAID;
 }
 

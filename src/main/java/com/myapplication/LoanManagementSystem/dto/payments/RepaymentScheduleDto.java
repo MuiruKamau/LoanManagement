@@ -12,6 +12,7 @@ public class RepaymentScheduleDto {
     private LocalDate dueDate;
     private BigDecimal amountDue;
     private BigDecimal emi;
+    private BigDecimal ewi;
     private BigDecimal amountPaid;
     private LocalDate paymentDate;
     private RepaymentStatus paymentStatus;

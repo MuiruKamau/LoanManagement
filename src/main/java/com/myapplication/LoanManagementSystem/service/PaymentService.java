@@ -3,12 +3,9 @@ package com.myapplication.LoanManagementSystem.service;
 import com.myapplication.LoanManagementSystem.dto.payments.BulkPaymentRequestDto;
 import com.myapplication.LoanManagementSystem.dto.payments.PaymentDto;
 import com.myapplication.LoanManagementSystem.dto.payments.PaymentRequestDto;
+import com.myapplication.LoanManagementSystem.dto.payments.PaymentSummaryDto;
 import com.myapplication.LoanManagementSystem.dto.payments.RepaymentScheduleDto;
-import com.myapplication.LoanManagementSystem.model.Loan;
-import com.myapplication.LoanManagementSystem.model.Payment;
-import com.myapplication.LoanManagementSystem.model.RepaymentSchedule;
-import com.myapplication.LoanManagementSystem.model.RepaymentStatus;
-import com.myapplication.LoanManagementSystem.model.LoanStatus;
+import com.myapplication.LoanManagementSystem.model.*;
 import com.myapplication.LoanManagementSystem.repository.LoanRepository;
 import com.myapplication.LoanManagementSystem.repository.PaymentRepository;
 import com.myapplication.LoanManagementSystem.repository.RepaymentScheduleRepository;
@@ -16,9 +13,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,17 +40,18 @@ public class PaymentService {
         RepaymentSchedule schedule = scheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new RuntimeException("Repayment schedule not found with id " + scheduleId));
 
-        // Update schedule
+        // Update schedule: add payment to existing amountPaid.
         BigDecimal newAmountPaid = (schedule.getAmountPaid() == null ? BigDecimal.ZERO : schedule.getAmountPaid())
                 .add(dto.getPaymentAmount());
         schedule.setAmountPaid(newAmountPaid);
 
-        // If the installment is fully paid, mark it as PAID
+        // Update payment status:
         if (newAmountPaid.compareTo(schedule.getAmountDue()) >= 0) {
             schedule.setPaymentStatus(RepaymentStatus.PAID);
             schedule.setPaymentDate(dto.getPaymentDate());
+        } else if (newAmountPaid.compareTo(BigDecimal.ZERO) > 0) {
+            schedule.setPaymentStatus(RepaymentStatus.PARTIALLY_PAID);
         }
-
         scheduleRepository.save(schedule);
 
         // Create a Payment record for auditing
@@ -78,12 +79,7 @@ public class PaymentService {
         Loan loan = loanRepository.findById(dto.getLoanId())
                 .orElseThrow(() -> new RuntimeException("Loan not found with id " + dto.getLoanId()));
 
-        /*List<RepaymentSchedule> schedules = loan.getRepaymentSchedules().stream()
-                .filter(schedule -> schedule.getDueDate() != null)
-                .sorted(Comparator.comparing(RepaymentSchedule::getDueDate))
-                .collect(Collectors.toList());*/
-
-        // Sort installments by due date or scheduleId
+        // Sort installments by due date
         List<RepaymentSchedule> schedules = loan.getRepaymentSchedules().stream()
                 .filter(rs -> rs.getDueDate() != null)
                 .filter(rs -> rs.getPaymentStatus() != RepaymentStatus.PAID)
@@ -97,19 +93,18 @@ public class PaymentService {
                 break;
             }
 
-            BigDecimal installmentBalance = schedule.getAmountDue().subtract(
-                    schedule.getAmountPaid() == null ? BigDecimal.ZERO : schedule.getAmountPaid()
-            );
+            BigDecimal alreadyPaid = schedule.getAmountPaid() == null ? BigDecimal.ZERO : schedule.getAmountPaid();
+            BigDecimal installmentBalance = schedule.getAmountDue().subtract(alreadyPaid);
             BigDecimal paymentForThisInstallment = remainingPayment.min(installmentBalance);
 
-            // Update schedule
-            BigDecimal newAmountPaid = (schedule.getAmountPaid() == null ? BigDecimal.ZERO : schedule.getAmountPaid())
-                    .add(paymentForThisInstallment);
+            // Update schedule amountPaid and status
+            BigDecimal newAmountPaid = alreadyPaid.add(paymentForThisInstallment);
             schedule.setAmountPaid(newAmountPaid);
-
             if (newAmountPaid.compareTo(schedule.getAmountDue()) >= 0) {
                 schedule.setPaymentStatus(RepaymentStatus.PAID);
                 schedule.setPaymentDate(dto.getPaymentDate());
+            } else if (newAmountPaid.compareTo(BigDecimal.ZERO) > 0) {
+                schedule.setPaymentStatus(RepaymentStatus.PARTIALLY_PAID);
             }
             scheduleRepository.save(schedule);
 
@@ -124,7 +119,7 @@ public class PaymentService {
             remainingPayment = remainingPayment.subtract(paymentForThisInstallment);
         }
 
-        // Check if the entire loan is paid
+        // Update loan status if all schedules are PAID
         boolean allPaid = loan.getRepaymentSchedules().stream()
                 .allMatch(rs -> rs.getPaymentStatus() == RepaymentStatus.PAID);
         if (allPaid) {
@@ -134,7 +129,7 @@ public class PaymentService {
     }
 
     /**
-     * Retrieve all repayment schedules for a given loan.
+     * Retrieves all repayment schedules for a given loan as DTOs.
      */
     public List<RepaymentScheduleDto> getSchedulesByLoan(Long loanId) {
         List<RepaymentSchedule> schedules = scheduleRepository.findByLoan_Id(loanId);
@@ -144,7 +139,12 @@ public class PaymentService {
             dto.setScheduleId(s.getId());
             dto.setDueDate(s.getDueDate());
             dto.setAmountDue(s.getAmountDue());
-            dto.setEmi(s.getEmi());
+            // Depending on the loan frequency, show either emi or ewi
+            if (s.getLoan().getRepaymentFrequency() == Frequency.MONTHLY) {
+                dto.setEmi(s.getEmi());
+            } else if (s.getLoan().getRepaymentFrequency() == Frequency.WEEKLY) {
+                dto.setEwi(s.getEwi());
+            }
             dto.setAmountPaid(s.getAmountPaid());
             dto.setPaymentDate(s.getPaymentDate());
             dto.setPaymentStatus(s.getPaymentStatus());
@@ -155,7 +155,7 @@ public class PaymentService {
     }
 
     /**
-     * Retrieve all payment records for a given loan.
+     * Retrieves all payment records for a given loan as DTOs.
      */
     public List<PaymentDto> getPaymentsByLoan(Long loanId) {
         List<Payment> payments = paymentRepository.findByLoan_Id(loanId);
@@ -170,5 +170,31 @@ public class PaymentService {
         }
         return dtos;
     }
+
+    /**
+     * Calculates a summary for a given loan including:
+     * - TotalAmountRepayable (the loan’s total repayable amount)
+     * - TotalAmountPaid (sum of all payments made)
+     * - RemainingInstallments (number of schedules not fully paid)
+     * - RemainingBalance (totalRepayable - totalPaid)
+     */
+    public PaymentSummaryDto calculatePaymentSummary(Long loanId) {
+        Loan loan = loanRepository.findById(loanId)
+                .orElseThrow(() -> new RuntimeException("Loan not found with id " + loanId));
+        BigDecimal totalPaid = loan.getRepaymentSchedules().stream()
+                .map(rs -> rs.getAmountPaid() == null ? BigDecimal.ZERO : rs.getAmountPaid())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long remainingInstallments = loan.getRepaymentSchedules().stream()
+                .filter(rs -> rs.getPaymentStatus() != RepaymentStatus.PAID)
+                .count();
+        BigDecimal remainingBalance = loan.getTotalRepayableAmount().subtract(totalPaid);
+        PaymentSummaryDto summary = new PaymentSummaryDto();
+        summary.setTotalAmountRepayable(loan.getTotalRepayableAmount());
+        summary.setTotalAmountPaid(totalPaid);
+        summary.setRemainingInstallments((int) remainingInstallments);
+        summary.setRemainingBalance(remainingBalance);
+        return summary;
+    }
 }
+
 
