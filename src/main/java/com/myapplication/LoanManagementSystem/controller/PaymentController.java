@@ -12,6 +12,8 @@ import java.util.List;
  * PaymentController handles both single-installment and bulk payments.
  * It also provides endpoints for retrieving payment history and repayment schedules for a loan.
  */
+
+@CrossOrigin(origins = "*", allowedHeaders = "*", methods = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT, RequestMethod.DELETE, RequestMethod.OPTIONS})
 @RestController
 @RequestMapping("/payments")
 public class PaymentController {
