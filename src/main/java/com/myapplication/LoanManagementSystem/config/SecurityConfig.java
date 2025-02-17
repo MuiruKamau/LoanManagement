@@ -42,19 +42,8 @@ public class SecurityConfig {
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
-
-
-    @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http
-                .csrf(csrf -> csrf.disable()) // Keep CSRF disabled if you intend to disable it
-                .authorizeHttpRequests(auth -> auth
-                        .anyRequest().permitAll() //  <--  THIS IS THE KEY CHANGE: Allow ALL requests
-                );
-        return http.build(); // Make sure this line is present and *not* commented out
-    }
-}
-   /* public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+@Bean
+public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
@@ -73,6 +62,8 @@ public class SecurityConfig {
                                 "/loans/delete/**",
                                 "/loans/calculate",
                                 "/customers/**",
+                                "/payments/**",
+                                "/stats/**",
                                 "/repayment-schedules/**"
                         ).permitAll()
                         .anyRequest().authenticated()
@@ -82,9 +73,23 @@ public class SecurityConfig {
 
         return http.build();
     }
+
 }
 
-*/
+
+    // Disabling security
+    /*public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                .csrf(csrf -> csrf.disable()) // Keep CSRF disabled if you intend to disable it
+                .authorizeHttpRequests(auth -> auth
+                        .anyRequest().permitAll() //  <--  THIS IS THE KEY CHANGE: Allow ALL requests
+                );
+        return http.build(); // Make sure this line is present and *not* commented out
+    } */
+
+
+
+
 
 
 
