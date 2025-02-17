@@ -63,6 +63,32 @@ public class LoanController {
     // PUT endpoint for updating an existing loan using LoanRequestDto: /loans/update/{id}
     @PutMapping("/update/{id}")
     public ResponseEntity<Loan> updateLoan(@PathVariable Long id, @RequestBody LoanRequestDto dto) {
+        // First, retrieve the existing loan (which contains the full customer details)
+        Loan existingLoan = loanService.getLoanById(id)
+                .orElseThrow(() -> new RuntimeException("Loan not found with id " + id));
+
+        // Update only the updatable fields from the DTO
+        existingLoan.setPrincipalAmount(dto.getPrincipalAmount());
+        existingLoan.setInterestRate(BigDecimal.valueOf(dto.getInterestRate())); // converts int to BigDecimal
+        existingLoan.setRepaymentPeriod(dto.getRepaymentPeriod());
+        existingLoan.setRepaymentFrequency(dto.getRepaymentFrequency());
+
+        // Optionally, you might want to recalculate totalRepayableAmount and dueDate here,
+        // or leave them as is if they should not change on update.
+        // For example, if you wish to re-calc, you could call:
+        // LoanCalculationResponseDto calc = LoanCalculator.calculateLoan(
+        //        dto.getPrincipalAmount(), dto.getRepaymentPeriod(), dto.getInterestRate(), dto.getRepaymentFrequency());
+        // existingLoan.setTotalRepayableAmount(calc.getTotalRepayableAmount());
+        // existingLoan.setDueDate(calc.getDueDate());
+        // existingLoan.setNumberOfInstallments(calc.getNumberOfInstallments());
+
+        // Do not update the customer field.
+        Loan updatedLoan = loanService.updateLoan(id, existingLoan);
+        return ResponseEntity.ok(updatedLoan);
+    }
+
+
+    /*public ResponseEntity<Loan> updateLoan(@PathVariable Long id, @RequestBody LoanRequestDto dto) {
         Loan loanToUpdate = new Loan();
         // Optionally, you might not allow updating the customer reference.
         // If updating the customer is allowed, fetch the customer similarly as above.
@@ -75,7 +101,7 @@ public class LoanController {
 
         Loan updatedLoan = loanService.updateLoan(id, loanToUpdate);
         return ResponseEntity.ok(updatedLoan);
-    }
+    }*/
 
     // DELETE endpoint for removing a loan by ID: /loans/delete/{id}
     @DeleteMapping("/delete/{id}")
